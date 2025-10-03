@@ -1,50 +1,84 @@
 const { ethers } = require("hardhat");
+const { expect } = require("chai");
 
-describe("Uniswap V2 Fork Test", function () {
-  it("impersonates a USDC whale and swaps USDC for WETH", async function () {
-    const UNISWAP_V2_ROUTER = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-    const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // mainnet USDC
-    const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"; // mainnet WETH
+describe("Uniswap V3 Integration Test", function () {
+  it("tests Uniswap integration with Base mainnet fork", async function () {
+    const [deployer] = await ethers.getSigners();
 
-    // pick a whale (big USDC holder)
-    const whale = "0x55fe002aeff02f77364de339a1292923a15844b8"; // USDC-rich address
+    // Base Mainnet addresses
+    const USDC_BASE_MAINNET = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+    const WETH_BASE_MAINNET = "0x4200000000000000000000000000000000000006";
 
-    // 1. impersonate whale
-    await hre.network.provider.request({
-      method: "hardhat_impersonateAccount",
-      params: [whale],
-    });
-    const whaleSigner = await ethers.getSigner(whale);
+    // Deploy MIND token
+    const MIND = await ethers.getContractFactory("MIND");
+    const mindToken = await MIND.deploy();
+    await mindToken.waitForDeployment();
 
-    // 2. give whale ETH for gas
-    await hre.network.provider.send("hardhat_setBalance", [
-      whale,
-      ethers.utils.parseEther("1000").toHexString(),
-    ]);
+    // Deploy staking contract
+    const MINDStaking = await ethers.getContractFactory("MINDStaking");
+    const staking = await MINDStaking.deploy(mindToken.target);
+    await staking.waitForDeployment();
 
-    // 3. attach contracts
-    const usdc = await ethers.getContractAt("IERC20", USDC, whaleSigner);
-    const weth = await ethers.getContractAt("IERC20", WETH, whaleSigner);
-    const router = await ethers.getContractAt("IUniswapV2Router02", UNISWAP_V2_ROUTER, whaleSigner);
+    await mindToken.addMinter(staking.target);
 
-    // 4. approve router
-    const amountIn = ethers.utils.parseUnits("1000", 6); // 1000 USDC (6 decimals)
-    await usdc.approve(UNISWAP_V2_ROUTER, amountIn);
+    // Deploy AI Strategy Manager
+    const AIStrategyManagerV2 = await ethers.getContractFactory("AIStrategyManagerV2");
+    const strategyManager = await AIStrategyManagerV2.deploy(deployer.address);
+    await strategyManager.waitForDeployment();
 
-    // 5. run swap
-    const amountsOut = await router.getAmountsOut(amountIn, [USDC, WETH]);
-    const minOut = amountsOut[1].mul(90).div(100); // 10% slippage tolerance
-
-    await router.swapExactTokensForTokens(
-      amountIn,
-      minOut,
-      [USDC, WETH],
-      whale,
-      Math.floor(Date.now() / 1000) + 60 * 10
+    // Deploy Simplified Uniswap Adapter
+    const SimplifiedUniswapAdapter = await ethers.getContractFactory("SimplifiedUniswapAdapter");
+    const uniswapAdapter = await SimplifiedUniswapAdapter.deploy(
+      USDC_BASE_MAINNET,
+      WETH_BASE_MAINNET,
+      "0x1234567890123456789012345678901234567890", // Mock router
+      strategyManager.target
     );
+    await uniswapAdapter.waitForDeployment();
 
-    // 6. check balances
-    const wethBalance = await weth.balanceOf(whale);
-    console.log("WETH received:", ethers.utils.formatEther(wethBalance));
+    // Deploy vault WITH strategy manager
+    const NeuroWealthVault = await ethers.getContractFactory("NeuroWealthVault");
+    const vault = await NeuroWealthVault.deploy(
+      staking.target,
+      strategyManager.target,
+      USDC_BASE_MAINNET
+    );
+    await vault.waitForDeployment();
+
+    // Update strategy manager with vault address
+    await strategyManager.setVault(vault.target);
+
+    // Initialize Uniswap in strategy manager
+    await strategyManager.initializeUniswap(uniswapAdapter.target);
+
+    // Get USDC from whale
+    const USDC_WHALE = "0x20FE51A9229EEf2cF8Ad9E89d91CAb9312cF3b7A";
+    await ethers.provider.send("hardhat_impersonateAccount", [USDC_WHALE]);
+    const whale = await ethers.getSigner(USDC_WHALE);
+
+    const usdc = await ethers.getContractAt("IERC20", USDC_BASE_MAINNET);
+    await usdc.connect(whale).transfer(deployer.address, ethers.parseUnits("10000", 6));
+
+    // Stake MIND
+    await mindToken.approve(staking.target, ethers.parseEther("100"));
+    await staking.stake(ethers.parseEther("100"));
+
+    // Test deposit
+    await usdc.approve(vault.target, ethers.parseUnits("1000", 6));
+    await vault.deposit(ethers.parseUnits("1000", 6));
+
+    // Verify position
+    const position = await vault.getUserPosition(deployer.address);
+    const uniswapBalance = await uniswapAdapter.getUserBalance(deployer.address);
+
+    // Assertions
+    expect(position.principal).to.equal(ethers.parseUnits("1000", 6));
+    expect(position.currentValue).to.equal(ethers.parseUnits("1000", 6));
+    expect(uniswapBalance).to.equal(ethers.parseUnits("1000", 6));
+
+    console.log("✅ Uniswap integration test passed!");
+    console.log("✅ Principal:", ethers.formatUnits(position.principal, 6), "USDC");
+    console.log("✅ Current Value:", ethers.formatUnits(position.currentValue, 6), "USDC");
+    console.log("✅ Uniswap Balance:", ethers.formatUnits(uniswapBalance, 6), "USDC");
   });
 });

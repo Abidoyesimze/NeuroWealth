@@ -1,42 +1,36 @@
-import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { http, createConfig } from 'wagmi';
+import { createAppKit } from '@reown/appkit/react'
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
+import { baseSepolia } from 'viem/chains'
 
-// Define Base mainnet
-const baseChain = {
-  id: 8453,
-  name: 'Base',
-  nativeCurrency: {
-    name: 'Ethereum',
-    symbol: 'ETH',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: [
-        'https://mainnet.base.org',
-        'https://base-mainnet.public.blastapi.io',
-        'https://base.blockpi.network/v1/rpc/public'
-      ],
-    },
-    public: {
-      http: [
-        'https://mainnet.base.org',
-        'https://base-mainnet.public.blastapi.io',
-        'https://base.blockpi.network/v1/rpc/public'
-      ],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: 'BaseScan',
-      url: 'https://basescan.org',
-    },
-  },
-} as const;
+// Get the project ID from environment variables
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!
 
-export const wagmiConfig = getDefaultConfig({
-  appName: 'NeuroWealth',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
-  chains: [baseChain], // Base mainnet
+if (!projectId) {
+  throw new Error('Missing NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID')
+}
+
+// Create wagmi adapter
+export const wagmiAdapter = new WagmiAdapter({
   ssr: false,
-});
+  networks: [baseSepolia],
+  projectId,
+})
+
+// Get wagmi config from the adapter
+export const wagmiConfig = wagmiAdapter.wagmiConfig
+
+// Create AppKit instance
+export const appKit = createAppKit({
+  adapters: [wagmiAdapter],
+  networks: [baseSepolia],
+  projectId,
+  metadata: {
+    name: 'NeuroWealth',
+    description: 'AI-Powered DeFi Investment Platform',
+    url: 'https://neurowealth.com',
+    icons: ['https://neurowealth.com/logo.png'],
+  },
+  features: {
+    analytics: false, // Disable analytics for now
+  },
+})

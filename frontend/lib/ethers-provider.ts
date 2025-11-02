@@ -1,21 +1,21 @@
 import { ethers } from 'ethers';
 import { NeuroWealthVaultContract } from '@/abi';
 
-// Network configuration
+// Network configuration - Base Sepolia Testnet
 export const NETWORK_CONFIG = {
-  chainId: 8453,
-  name: 'Base',
+  chainId: 84532,
+  name: 'Base Sepolia',
   rpcUrls: [
-    'https://mainnet.base.org',
-    'https://base-mainnet.public.blastapi.io',
-    'https://base.blockpi.network/v1/rpc/public'
+    'https://sepolia.base.org',
+    'https://base-sepolia-rpc.publicnode.com',
+    'https://base-sepolia.drpc.org'
   ],
   nativeCurrency: {
     name: 'Ethereum',
     symbol: 'ETH',
     decimals: 18,
   },
-  blockExplorer: 'https://basescan.org'
+  blockExplorer: 'https://sepolia.basescan.org'
 };
 
 // Create ethers provider with fallback RPCs
@@ -37,7 +37,7 @@ export const createEthersSigner = async () => {
     throw new Error('MetaMask not detected');
   }
 
-  const provider = new ethers.BrowserProvider(window.ethereum);
+  const provider = new ethers.BrowserProvider(window.ethereum as any);
   
   // Request account access
   await provider.send('eth_requestAccounts', []);
@@ -48,7 +48,7 @@ export const createEthersSigner = async () => {
   // Verify we're on the correct network
   const network = await provider.getNetwork();
   if (Number(network.chainId) !== NETWORK_CONFIG.chainId) {
-    throw new Error(`Please switch to Base mainnet (Chain ID: ${NETWORK_CONFIG.chainId})`);
+    throw new Error(`Please switch to Base Sepolia (Chain ID: ${NETWORK_CONFIG.chainId})`);
   }
   
   return signer;
@@ -426,21 +426,21 @@ export const getPendingRewards = async (userAddress: string) => {
   }
 };
 
-// Switch to Base mainnet
-export const switchToBaseMainnet = async () => {
+// Switch to Base Sepolia testnet
+export const switchToBaseSepolia = async () => {
   if (typeof window === 'undefined' || !window.ethereum) {
     throw new Error('MetaMask not detected');
   }
 
   try {
-    await window.ethereum.request({
+    await (window.ethereum as any).request({
       method: 'wallet_switchEthereumChain',
       params: [{ chainId: `0x${NETWORK_CONFIG.chainId.toString(16)}` }],
     });
   } catch (switchError: any) {
     // If the network doesn't exist, add it
     if (switchError?.code === 4902) {
-      await window.ethereum.request({
+      await (window.ethereum as any).request({
         method: 'wallet_addEthereumChain',
         params: [
           {

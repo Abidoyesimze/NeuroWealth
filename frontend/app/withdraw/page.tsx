@@ -12,7 +12,7 @@ import {
   executeWithdrawal, 
   getUSDCBalance, 
   checkWalletConnection,
-  switchToBaseMainnet,
+  switchToBaseSepolia,
   getUserPosition,
   NETWORK_CONFIG
 } from '@/lib/ethers-provider';
@@ -102,7 +102,7 @@ export default function WithdrawPage() {
 
   const connectWallet = async () => {
     try {
-      await switchToBaseMainnet();
+      await switchToBaseSepolia();
       await checkConnection();
       toast.success('Wallet connected successfully!');
     } catch (error: any) {
